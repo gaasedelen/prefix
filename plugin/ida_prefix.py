@@ -10,7 +10,7 @@ from prefix.shims import *
 # IDA Plugin
 #------------------------------------------------------------------------------
 
-VERSION = "v1.0"
+VERSION = "v1.1"
 AUTHORS = ['Andrew Marumoto', 'Markus Gaasedelen']
 
 def PLUGIN_ENTRY():
