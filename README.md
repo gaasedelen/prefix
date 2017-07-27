@@ -10,6 +10,7 @@ Prefix is a small function prefixing plugin for [IDA Pro](https://www.hex-rays.c
 
 ## Releases
 
+* v1.1 -- Added IDA 7 support.
 * v1.0 -- Initial release
 
 ## Installation
@@ -21,7 +22,7 @@ Install Prefix into the IDA plugins folder.
     - On MacOS, the folder is at `/Applications/IDA\ Pro\ 6.8/idaq.app/Contents/MacOS/plugins`
     - On Linux, the folder may be at `/opt/IDA/plugins/`
 
-The plugin has only been tested on IDA Pro 6.8, 6.95 for Windows.
+The plugin is platform agnostic, but has only been tested on Windows for IDA 6.8 --> 7.0
 
 ## Usage
 
