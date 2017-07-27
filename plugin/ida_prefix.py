@@ -4,7 +4,7 @@ import idc
 import idaapi
 import idautils
 
-from prefix.qtshim import *
+from prefix.shims import *
 
 #------------------------------------------------------------------------------
 # IDA Plugin
@@ -195,72 +195,18 @@ class prefix_t(idaapi.plugin_t):
 
 class Hooks(idaapi.UI_Hooks):
 
+    def finish_populating_widget_popup(self, widget, popup):
+        """
+        A right click menu is about to be shown. (IDA 7)
+        """
+        inject_prefix_actions(widget, popup, idaapi.get_widget_type(widget))
+        return 0
+
     def finish_populating_tform_popup(self, form, popup):
         """
-        A right click menu is about to be shown.
+        A right click menu is about to be shown. (IDA 6.x)
         """
-
-        #
-        # disassembly window
-        #
-
-        if idaapi.get_tform_type(form) == idaapi.BWN_DISASMS:
-
-            #
-            # if the user cursor isn't hovering over a function ref, there
-            # is nothing for us to do
-            #
-
-            if get_cursor_func_ref() == idaapi.BADADDR:
-                return
-
-            #
-            # the user cursor is hovering over a valid target for a recursive
-            # function prefix. insert the prefix action entry into the menu
-            #
-
-            idaapi.attach_action_to_popup(
-                form,
-                popup,
-                prefix_t.ACTION_RECURSIVE,
-                "Rename",
-                idaapi.SETMENU_APP
-            )
-
-        #
-        # functions window
-        #
-
-        elif idaapi.get_tform_type(form) == idaapi.BWN_FUNCS:
-
-            # inject the 'Bulk' function prefix action
-            idaapi.attach_action_to_popup(
-                form,
-                popup,
-                prefix_t.ACTION_BULK,
-                "Delete function(s)...",
-                idaapi.SETMENU_INS
-            )
-
-            # inject the 'Clear prefix' action
-            idaapi.attach_action_to_popup(
-                form,
-                popup,
-                prefix_t.ACTION_CLEAR,
-                "Delete function(s)...",
-                idaapi.SETMENU_INS
-            )
-
-            # inject a menu separator
-            idaapi.attach_action_to_popup(
-                form,
-                popup,
-                None,
-                "Delete function(s)...",
-                idaapi.SETMENU_INS
-            )
-
-        # done
+        inject_prefix_actions(form, popup, idaapi.get_tform_type(form))
         return 0
 
     def hxe_callback(self, event, *args):
@@ -320,6 +266,74 @@ def recursive_prefix_cursor():
     # execute the recursive prefix
     recursive_prefix(target)
 
+def inject_prefix_actions(form, popup, form_type):
+    """
+    Inject prefix actions to popup menu(s) based on context.
+    """
+
+    #
+    # disassembly window
+    #
+
+    if form_type == idaapi.BWN_DISASMS:
+
+        #
+        # if the user cursor isn't hovering over a function ref, there
+        # is nothing for us to do
+        #
+
+        if get_cursor_func_ref() == idaapi.BADADDR:
+            return
+
+        #
+        # the user cursor is hovering over a valid target for a recursive
+        # function prefix. insert the prefix action entry into the menu
+        #
+
+        idaapi.attach_action_to_popup(
+            form,
+            popup,
+            prefix_t.ACTION_RECURSIVE,
+            "Rename",
+            idaapi.SETMENU_APP
+        )
+
+    #
+    # functions window
+    #
+
+    elif form_type == idaapi.BWN_FUNCS:
+
+        # inject the 'Bulk' function prefix action
+        idaapi.attach_action_to_popup(
+            form,
+            popup,
+            prefix_t.ACTION_BULK,
+            "Delete function(s)...",
+            idaapi.SETMENU_INS
+        )
+
+        # inject the 'Clear prefix' action
+        idaapi.attach_action_to_popup(
+            form,
+            popup,
+            prefix_t.ACTION_CLEAR,
+            "Delete function(s)...",
+            idaapi.SETMENU_INS
+        )
+
+        # inject a menu separator
+        idaapi.attach_action_to_popup(
+            form,
+            popup,
+            None,
+            "Delete function(s)...",
+            idaapi.SETMENU_INS
+        )
+
+    # done
+    return 0
+
 #------------------------------------------------------------------------------
 # Prefix API
 #------------------------------------------------------------------------------
@@ -331,14 +345,13 @@ def recursive_prefix(addr):
     """
     Recursively prefix a function tree with a user defined string.
     """
-
-    func_addr = idc.LocByName(idaapi.get_func_name(addr))
+    func_addr = idaapi.get_name_ea(idaapi.BADADDR, idaapi.get_func_name(addr))
     if func_addr == idaapi.BADADDR:
         idaapi.msg("Prefix: 0x%08X does not belong to a defined function\n" % addr)
         return
 
     # prompt the user for a prefix to apply to the selected functions
-    tag = idc.AskStr(PREFIX_DEFAULT, "Function Tag")
+    tag = idaapi.askstr(0, PREFIX_DEFAULT, "Function Tag")
 
     # the user closed the window... ignore
     if tag == None:
@@ -346,7 +359,7 @@ def recursive_prefix(addr):
 
     # the user put a blank string and hit 'okay'... notify & ignore
     elif tag == '':
-        idc.Warning("[ERROR] Tag cannot be empty [ERROR]")
+        idaapi.warning("[ERROR] Tag cannot be empty [ERROR]")
         return
 
     # recursively collect all the functions called by this function
@@ -355,17 +368,17 @@ def recursive_prefix(addr):
     # graph_down returns the int address needs to be converted
     tmp  = []
     tmp1 = ''
-    for func in nodes_xref_down:
-        tmp1 = idaapi.get_func_name(func)
+    for func_addr in nodes_xref_down:
+        tmp1 = idaapi.get_func_name(func_addr)
         if tmp1:
             tmp.append(tmp1)
     nodes_xref_down = tmp
 
     # prefix the tree of functions
     for rename in nodes_xref_down:
-        func_addr = idc.LocByName(rename)
+        func_addr = idaapi.get_name_ea(idaapi.BADADDR, rename)
         if tag not in rename:
-            idc.MakeNameEx(func_addr, '%s%s%s' % (str(tag), PREFIX_SEPARATOR, rename), idaapi.SN_NOWARN)
+            idaapi.set_name(func_addr,'%s%s%s' % (str(tag), PREFIX_SEPARATOR, rename), idaapi.SN_NOWARN)
 
     # refresh the IDA views
     refresh_views()
@@ -376,7 +389,7 @@ def bulk_prefix():
     """
 
     # prompt the user for a prefix to apply to the selected functions
-    tag = idc.AskStr(PREFIX_DEFAULT, "Function Tag")
+    tag = idaapi.askstr(0, PREFIX_DEFAULT, "Function Tag")
 
     # the user closed the window... ignore
     if tag == None:
@@ -384,7 +397,7 @@ def bulk_prefix():
 
     # the user put a blank string and hit 'okay'... notify & ignore
     elif tag == '':
-        idc.Warning("[ERROR] Tag cannot be empty [ERROR]")
+        idaapi.warning("[ERROR] Tag cannot be empty [ERROR]")
         return
 
     #
@@ -399,8 +412,9 @@ def bulk_prefix():
             continue
 
         # apply the user defined prefix to the function (rename it)
-        new_name = '%s%s%s' % (str(tag), PREFIX_SEPARATOR, func_name)
-        idc.MakeNameEx(idc.LocByName(func_name), new_name, idaapi.SN_NOWARN)
+        new_name  = '%s%s%s' % (str(tag), PREFIX_SEPARATOR, func_name)
+        func_addr = idaapi.get_name_ea(idaapi.BADADDR, func_name)
+        idaapi.set_name(func_addr, new_name, idaapi.SN_NOWARN)
 
     # refresh the IDA views
     refresh_views()
@@ -429,8 +443,9 @@ def clear_prefix():
             continue
 
         # trim the prefix off the original function name and discard it
-        new_name = func_name[i+1:]
-        idc.MakeNameEx(idc.LocByName(func_name), new_name, idaapi.SN_NOWARN)
+        new_name  = func_name[i+1:]
+        func_addr = idaapi.get_name_ea(idaapi.BADADDR, func_name)
+        idaapi.set_name(func_addr, new_name, idaapi.SN_NOWARN)
 
     # refresh the IDA views
     refresh_views()
@@ -447,9 +462,14 @@ def refresh_views():
     # refresh IDA views
     idaapi.refresh_idaview_anyway()
 
-    # refresh hexrays view, if active
-    current_tform = idaapi.get_current_tform()
-    vu = idaapi.get_tform_vdui(current_tform)
+    # NOTE/COMPAT: refresh hexrays view, if active
+    if using_ida7api:
+        current_widget = idaapi.get_current_widget()
+        vu = idaapi.get_widget_vdui(current_widget)
+    else:
+        current_tform = idaapi.get_current_tform()
+        vu = idaapi.get_tform_vdui(current_tform)
+
     if vu:
         vu.refresh_ctext()
 
@@ -465,11 +485,16 @@ def get_cursor_func_ref():
 
     Returns BADADDR or a valid function address.
     """
-    current_tform  = idaapi.get_current_tform()
-    tform_type     = idaapi.get_tform_type(current_tform)
 
-    # get the hexrays vdui (if available)
-    vu = idaapi.get_tform_vdui(current_tform)
+    # NOTE / COMPAT:
+    if using_ida7api:
+        current_widget = idaapi.get_current_widget()
+        form_type      = idaapi.get_widget_type(current_widget)
+        vu = idaapi.get_widget_vdui(current_widget)
+    else:
+        current_tform = idaapi.get_current_tform()
+        form_type    = idaapi.get_tform_type(current_tform)
+        vu = idaapi.get_tform_vdui(current_tform)
 
     #
     # hexrays view is active
@@ -482,18 +507,32 @@ def get_cursor_func_ref():
     # disassembly view is active
     #
 
-    elif tform_type == idaapi.BWN_DISASM:
+    elif form_type == idaapi.BWN_DISASM:
         cursor_addr = idaapi.get_screen_ea()
+        opnum = idaapi.get_opnum()
 
-        #
-        # if the cursor is over an operand value that has a function ref,
-        # use that as a valid rename target
-        #
+        if opnum != -1:
 
-        op_addr = idc.GetOperandValue(cursor_addr, idaapi.get_opnum())
-        op_func = idaapi.get_func(op_addr)
-        if op_func and op_func.startEA == op_addr:
-            return op_addr
+            #
+            # if the cursor is over an operand value that has a function ref,
+            # use that as a valid rename target
+            #
+
+            # NOTE/COMPAT:
+            if using_ida7api:
+                op_addr = idc.get_operand_value(cursor_addr, opnum)
+            else:
+                op_addr = idc.GetOperandValue(cursor_addr, opnum)
+
+            op_func = idaapi.get_func(op_addr)
+
+            # NOTE/COMPAT:
+            if using_ida7api:
+                if op_func and op_func.start_ea == op_addr:
+                    return op_addr
+            else:
+                if op_func and op_func.startEA == op_addr:
+                    return op_addr
 
     # unsupported/unknown view is active
     else:
@@ -505,8 +544,14 @@ def get_cursor_func_ref():
     #
 
     cursor_func = idaapi.get_func(cursor_addr)
-    if cursor_func and cursor_func.startEA == cursor_addr:
-        return cursor_addr
+
+    # NOTE/COMPAT:
+    if using_ida7api:
+        if cursor_func and cursor_func.start_ea == cursor_addr:
+            return cursor_addr
+    else:
+        if cursor_func and cursor_func.startEA == cursor_addr:
+            return cursor_addr
 
     # fail
     return idaapi.BADADDR
@@ -516,21 +561,21 @@ def get_selected_funcs():
     Return the list of function names selected in the Functions window.
     """
 
-    # locate the functions window for scraping
-    tform = idaapi.find_tform("Functions window")
-    if not tform:
-        idc.Warning("Unable to find 'Functions window'")
-        return
-
-    #
-    # extract the PySide / PyQt widget from the located IDA TForm so we can
-    # tap into its Qt elements more easily and scrape relevant data from them
-    #
-
-    if using_pyqt5():
-        widget = idaapi.PluginForm.FormToPyQtWidget(tform)
+    if using_ida7api:
+        import sip
+        twidget = idaapi.find_widget("Functions window")
+        widget  = sip.wrapinstance(long(twidget), QtWidgets.QWidget) # NOTE: LOL
     else:
-        widget = idaapi.PluginForm.FormToPySideWidget(tform)
+        tform = idaapi.find_tform("Functions window")
+        if using_pyqt5:
+            widget = idaapi.PluginForm.FormToPyQtWidget(tform)
+        else:
+            widget = idaapi.PluginForm.FormToPySideWidget(tform)
+
+    # TODO: test this
+    if not widget:
+        idaapi.warning("Unable to find 'Functions window'")
+        return
 
     #
     # locate the table widget within the Functions window that actually holds
