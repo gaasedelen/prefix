@@ -10,7 +10,7 @@ from prefix.shims import *
 # IDA Plugin
 #------------------------------------------------------------------------------
 
-VERSION = "v1.1"
+VERSION = "v1.1.1"
 AUTHORS = ['Andrew Marumoto', 'Markus Gaasedelen']
 
 def PLUGIN_ENTRY():
@@ -350,8 +350,12 @@ def recursive_prefix(addr):
         idaapi.msg("Prefix: 0x%08X does not belong to a defined function\n" % addr)
         return
 
+    # NOTE / COMPAT:
     # prompt the user for a prefix to apply to the selected functions
-    tag = idaapi.askstr(0, PREFIX_DEFAULT, "Function Tag")
+    if using_ida7api:
+        tag = idaapi.ask_str(PREFIX_DEFAULT, 0, "Function Tag")
+    else:
+        tag = idaapi.askstr(0, PREFIX_DEFAULT, "Function Tag")
 
     # the user closed the window... ignore
     if tag == None:
@@ -388,8 +392,12 @@ def bulk_prefix():
     Prefix the Functions window selection with a user defined string.
     """
 
+    # NOTE / COMPAT:
     # prompt the user for a prefix to apply to the selected functions
-    tag = idaapi.askstr(0, PREFIX_DEFAULT, "Function Tag")
+    if using_ida7api:
+        tag = idaapi.ask_str(PREFIX_DEFAULT, 0, "Function Tag")
+    else:
+        tag = idaapi.askstr(0, PREFIX_DEFAULT, "Function Tag")
 
     # the user closed the window... ignore
     if tag == None:
@@ -561,6 +569,7 @@ def get_selected_funcs():
     Return the list of function names selected in the Functions window.
     """
 
+    # NOTE / COMPAT:
     if using_ida7api:
         import sip
         twidget = idaapi.find_widget("Functions window")
@@ -647,11 +656,37 @@ def graph_down(ea, path=set()):
     path.add(ea)
 
     #
+    # extract all the call instructions from the current function
+    #
+
+    call_instructions = []
+    instruction_info = idaapi.insn_t()
+    for address in idautils.FuncItems(ea):
+
+        # NOTE / COMPAT:
+        if using_ida7api:
+
+            # decode the instruction
+            if not idaapi.decode_insn(instruction_info, address):
+                continue
+
+            # check if this instruction is a call
+            if not idaapi.is_call_insn(instruction_info):
+                continue
+
+        else:
+            if not idaapi.is_call_insn(address):
+                continue
+
+        # save this address as a call instruction
+        call_instructions.append(address)
+
+    #
     # iterate through all the instructions in the target function (ea) and
     # inspect all the call instructions
     #
 
-    for x in [x for x in idautils.FuncItems(ea) if idaapi.is_call_insn(x)]:
+    for x in call_instructions:
 
         #  TODO
         for r in idautils.XrefsFrom(x, idaapi.XREF_FAR):
