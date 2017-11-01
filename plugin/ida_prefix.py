@@ -10,7 +10,7 @@ from prefix.shims import *
 # IDA Plugin
 #------------------------------------------------------------------------------
 
-VERSION = "v1.1.1"
+VERSION = "v1.1.2"
 AUTHORS = ['Andrew Marumoto', 'Markus Gaasedelen']
 
 def PLUGIN_ENTRY():
@@ -739,13 +739,14 @@ class IDACtxEntry(idaapi.action_handler_t):
 # Plugin Util
 #------------------------------------------------------------------------------
 
+PLUGIN_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), prefix_t.wanted_name))
+
 def plugin_resource(resource_name):
     """
     Return the full path for a given plugin resource file.
     """
     return os.path.join(
-        idaapi.idadir(idaapi.PLG_SUBDIR),
-        prefix_t.wanted_name,
+        PLUGIN_PATH,
         "resources",
         resource_name
     )
