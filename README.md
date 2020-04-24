@@ -10,19 +10,21 @@ Prefix is a small function prefixing plugin for [IDA Pro](https://www.hex-rays.c
 
 ## Releases
 
+* v1.2 -- Supoort IDA 7.0 -> 7.4, Python 2/3, deprecates IDA 6.x.
 * v1.1 -- Added IDA 7 support.
 * v1.0 -- Initial release
 
 ## Installation
 
-Install Prefix into the IDA plugins folder.
+Prefix is a cross-platform (Windows, macOS, Linux) Python 2/3 plugin. It takes zero third party dependencies, making the code both portable and easy to install.
 
-- Copy the contents of the `plugin` folder to the IDA plugins folder
-    - On Windows, the folder is at `C:\Program Files (x86)\IDA 6.8\plugins`
-    - On MacOS, the folder is at `/Applications/IDA\ Pro\ 6.8/idaq.app/Contents/MacOS/plugins`
-    - On Linux, the folder may be at `/opt/IDA/plugins/`
+1. From your disassembler's python console, run the following command to find its plugin directory:
+   - **IDA Pro**: `os.path.join(idaapi.get_user_idadir(), "plugins")`
 
-The plugin is platform agnostic, but has only been tested on Windows for IDA 6.8 --> 7.0
+2. Copy the contents of this repository's `/plugin/` folder to the listed directory.
+3. Restart your disassembler.
+
+This plugin is only supported for IDA 7.0 and newer.
 
 ## Usage
 

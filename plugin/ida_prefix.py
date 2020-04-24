@@ -4,13 +4,13 @@ import idc
 import idaapi
 import idautils
 
-from prefix.shims import *
+from PyQt5 import QtGui, QtCore, QtWidgets
 
 #------------------------------------------------------------------------------
 # IDA Plugin
 #------------------------------------------------------------------------------
 
-VERSION = "v1.1.2"
+VERSION = "v1.2"
 AUTHORS = ['Andrew Marumoto', 'Markus Gaasedelen']
 
 def PLUGIN_ENTRY():
@@ -195,18 +195,20 @@ class prefix_t(idaapi.plugin_t):
 
 class Hooks(idaapi.UI_Hooks):
 
+    def ready_to_run(self):
+        """
+        UI ready to run -- an IDA event fired when everything is spunup.
+
+        NOTE: this is a placeholder func, it gets replaced on a live instance
+        but we need it defined here for IDA 7.2+ to properly hook it.
+        """
+        pass
+
     def finish_populating_widget_popup(self, widget, popup):
         """
         A right click menu is about to be shown. (IDA 7)
         """
         inject_prefix_actions(widget, popup, idaapi.get_widget_type(widget))
-        return 0
-
-    def finish_populating_tform_popup(self, form, popup):
-        """
-        A right click menu is about to be shown. (IDA 6.x)
-        """
-        inject_prefix_actions(form, popup, idaapi.get_tform_type(form))
         return 0
 
     def hxe_callback(self, event, *args):
@@ -350,12 +352,8 @@ def recursive_prefix(addr):
         idaapi.msg("Prefix: 0x%08X does not belong to a defined function\n" % addr)
         return
 
-    # NOTE / COMPAT:
     # prompt the user for a prefix to apply to the selected functions
-    if using_ida7api:
-        tag = idaapi.ask_str(PREFIX_DEFAULT, 0, "Function Tag")
-    else:
-        tag = idaapi.askstr(0, PREFIX_DEFAULT, "Function Tag")
+    tag = idaapi.ask_str(PREFIX_DEFAULT, 0, "Function Tag")
 
     # the user closed the window... ignore
     if tag == None:
@@ -392,12 +390,8 @@ def bulk_prefix():
     Prefix the Functions window selection with a user defined string.
     """
 
-    # NOTE / COMPAT:
     # prompt the user for a prefix to apply to the selected functions
-    if using_ida7api:
-        tag = idaapi.ask_str(PREFIX_DEFAULT, 0, "Function Tag")
-    else:
-        tag = idaapi.askstr(0, PREFIX_DEFAULT, "Function Tag")
+    tag = idaapi.ask_str(PREFIX_DEFAULT, 0, "Function Tag")
 
     # the user closed the window... ignore
     if tag == None:
@@ -470,14 +464,9 @@ def refresh_views():
     # refresh IDA views
     idaapi.refresh_idaview_anyway()
 
-    # NOTE/COMPAT: refresh hexrays view, if active
-    if using_ida7api:
-        current_widget = idaapi.get_current_widget()
-        vu = idaapi.get_widget_vdui(current_widget)
-    else:
-        current_tform = idaapi.get_current_tform()
-        vu = idaapi.get_tform_vdui(current_tform)
-
+    # refresh hexrays
+    current_widget = idaapi.get_current_widget()
+    vu = idaapi.get_widget_vdui(current_widget)
     if vu:
         vu.refresh_ctext()
 
@@ -493,16 +482,9 @@ def get_cursor_func_ref():
 
     Returns BADADDR or a valid function address.
     """
-
-    # NOTE / COMPAT:
-    if using_ida7api:
-        current_widget = idaapi.get_current_widget()
-        form_type      = idaapi.get_widget_type(current_widget)
-        vu = idaapi.get_widget_vdui(current_widget)
-    else:
-        current_tform = idaapi.get_current_tform()
-        form_type    = idaapi.get_tform_type(current_tform)
-        vu = idaapi.get_tform_vdui(current_tform)
+    current_widget = idaapi.get_current_widget()
+    form_type      = idaapi.get_widget_type(current_widget)
+    vu = idaapi.get_widget_vdui(current_widget)
 
     #
     # hexrays view is active
@@ -526,21 +508,11 @@ def get_cursor_func_ref():
             # use that as a valid rename target
             #
 
-            # NOTE/COMPAT:
-            if using_ida7api:
-                op_addr = idc.get_operand_value(cursor_addr, opnum)
-            else:
-                op_addr = idc.GetOperandValue(cursor_addr, opnum)
-
+            op_addr = idc.get_operand_value(cursor_addr, opnum)
             op_func = idaapi.get_func(op_addr)
 
-            # NOTE/COMPAT:
-            if using_ida7api:
-                if op_func and op_func.start_ea == op_addr:
-                    return op_addr
-            else:
-                if op_func and op_func.startEA == op_addr:
-                    return op_addr
+            if op_func and op_func.start_ea == op_addr:
+                return op_addr
 
     # unsupported/unknown view is active
     else:
@@ -552,14 +524,8 @@ def get_cursor_func_ref():
     #
 
     cursor_func = idaapi.get_func(cursor_addr)
-
-    # NOTE/COMPAT:
-    if using_ida7api:
-        if cursor_func and cursor_func.start_ea == cursor_addr:
-            return cursor_addr
-    else:
-        if cursor_func and cursor_func.startEA == cursor_addr:
-            return cursor_addr
+    if cursor_func and cursor_func.start_ea == cursor_addr:
+        return cursor_addr
 
     # fail
     return idaapi.BADADDR
@@ -568,18 +534,9 @@ def get_selected_funcs():
     """
     Return the list of function names selected in the Functions window.
     """
-
-    # NOTE / COMPAT:
-    if using_ida7api:
-        import sip
-        twidget = idaapi.find_widget("Functions window")
-        widget  = sip.wrapinstance(long(twidget), QtWidgets.QWidget) # NOTE: LOL
-    else:
-        tform = idaapi.find_tform("Functions window")
-        if using_pyqt5:
-            widget = idaapi.PluginForm.FormToPyQtWidget(tform)
-        else:
-            widget = idaapi.PluginForm.FormToPySideWidget(tform)
+    import sip
+    twidget = idaapi.find_widget("Functions window")
+    widget  = sip.wrapinstance(int(twidget), QtWidgets.QWidget)
 
     # TODO: test this
     if not widget:
@@ -663,20 +620,13 @@ def graph_down(ea, path=set()):
     instruction_info = idaapi.insn_t()
     for address in idautils.FuncItems(ea):
 
-        # NOTE / COMPAT:
-        if using_ida7api:
+        # decode the instruction
+        if not idaapi.decode_insn(instruction_info, address):
+            continue
 
-            # decode the instruction
-            if not idaapi.decode_insn(instruction_info, address):
-                continue
-
-            # check if this instruction is a call
-            if not idaapi.is_call_insn(instruction_info):
-                continue
-
-        else:
-            if not idaapi.is_call_insn(address):
-                continue
+        # check if this instruction is a call
+        if not idaapi.is_call_insn(instruction_info):
+            continue
 
         # save this address as a call instruction
         call_instructions.append(address)
@@ -690,9 +640,9 @@ def graph_down(ea, path=set()):
 
         #  TODO
         for r in idautils.XrefsFrom(x, idaapi.XREF_FAR):
-            #print "0x%08X" % h, "--calls-->", "0x%08X" % r.to
+            #print(0x%08X" % h, "--calls-->", "0x%08X" % r.to)
             if not r.iscode:
-                    continue
+                continue
 
             # get the function pointed at by this call
             func = idaapi.get_func(r.to)
